@@ -1,0 +1,10 @@
+\begin{thebibliography}{1}
+
+\bibitem{icml_2009}
+Nils Plath, Marc Toussaint, and Shinichi Nakajima.
+\newblock Multi-class image segmentation using conditional random fields and
+  global classification.
+\newblock In {\em Proceedings of the 26th Annual International Conference on
+  Machine Learning}, ICML '09, pages 817--824, New York, NY, USA, 2009. ACM.
+
+\end{thebibliography}
