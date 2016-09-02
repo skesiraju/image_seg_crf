@@ -7,8 +7,7 @@ footskip=.25in]{geometry}
 %opening
 \title{Image Segmentation using Conditional Random Fields \\
 	  $[\textrm{CSE 471}]$ Statistical Methods in AI}
-\author{Santosh K (201150883), Sudheer T (201550851), Srikanth M (20163014)}
-\date{}
+\author{Santosh K, Sudheer T, Srikanth}
 
 \begin{document}
 
@@ -31,18 +30,14 @@ primary focus is on understanding and implementing conditional random fields
 
 Markov random fields (MRFs) are generative models, which can be used to model 
 the joint distribution of the data (features) $\mathbf{X}$ and the labels 
-(multi-class) $\mathbf{Y}$, i.e., $P(\mathbf{X, Y})$. Once we obtain the joint 
-distribution, we can easily obtain the conditional distributions $P(\mathbf{Y} 
-\mid \mathbf{X})$ and $P(\mathbf{X} \mid \mathbf{Y})$, but it often difficult to 
-model the joint distribution, especially when the random variables are 
-continuous and dependent on each other.
+(multi-class) $\mathbf{Y}$, i.e., $P(\mathbf{X, Y})$. They can also be used in 
+unsupervised scenario, just to model the distribution of features $\mathbf{X}$.
 
-MRFs can also be used in unsupervised scenario, just to model the distribution 
-of features $\mathbf{X}$. It is important to note that the features (color and, 
-texture based) are highly correlated (dependent on) with each other, 
-and hence we need random fields to model such data. The factorization of the 
-joint distribution of such data (features) can expressed with the help of 
-\textit{potential functions}, $\varphi_C(\mathbf{x}_c)$ \cite{Bishop:2006:ML}.
+It is important to note that the features (random variables) are highly 
+correlated (dependent on) with each other, and hence we need random fields to 
+model such data. The factorization of the joint distribution of such data 
+(features) can expressed with the help of \textit{potential functions}, 
+$\varphi_C(\mathbf{x}_c)$ \cite{Bishop:2006:ML}.
 \begin{equation}
  p(\mathbf{x}) = \frac{1}{Z} \prod_C \varphi(\mathbf{x}_C),
 \end{equation}
@@ -50,6 +45,10 @@ where each potential function $\varphi(\mathbf{x}_C)$ represents a maximal
 clique in the graph defined by the random field, and $Z$ is called as partition 
 function which acts as a normalization constant.
 
+Once we obtain the joint distribution, we can easily obtain the conditional
+distributions $P(\mathbf{Y} \mid \mathbf{X})$ and $P(\mathbf{X} \mid 
+\mathbf{Y})$, but it often difficult to model the joint distribution, especially
+when the random variables are continuous and dependent on each other.
 
 \section{Conditional random fields}
 \label{sec_crf}
@@ -71,12 +70,10 @@ We follow the approach as described in \cite{icml_2009} and the steps are
 briefly described as follows:
 
 \begin{enumerate}
-
-\item Initially, apply an unsupervised segmentation technique to partition 
+ \item Initially, apply an unsupervised segmentation technique to partition 
 the complete image into number of patches on multiple scale levels. Each scale 
 level gives different granularity in terms of color, and each patch represents
-a set of neighboring pixels. Initially we use simple $k$-means to as the 
-clustering technique.
+a set of neighboring pixels.
 
 \item For each patch on each level, obtain color, texture and SIFT (scale 
 invariant feature transform) features. These features are dependent on each 
@@ -96,16 +93,11 @@ segmentation.
 \end{enumerate}
 
 
+
 \section{Project plan and milestones}
 
 \begin{enumerate}
-  \item Sep 24, 2016: Implementation the pipeline as described in Section 
-\ref{sec_approach}, with primary focus on CRF and using existing libraries for 
-feature extraction and SVM.
-
-  \item Oct 31, 2016: Depending on the progress and obtained results, we also 
-plan to implement the MRFs for unsupervised image segmentation.
-
+  \item Sep 24, 2016: Implement the pipeline as described in 
 \end{enumerate}
 
 \bibliographystyle{plain}

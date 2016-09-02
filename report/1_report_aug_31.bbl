@@ -1,5 +1,10 @@
 \begin{thebibliography}{1}
 
+\bibitem{Bishop:2006:ML}
+Christopher~M. Bishop.
+\newblock {\em Pattern Recognition and Machine Learning}.
+\newblock Springer-Verlag New York, Inc., 2006.
+
 \bibitem{icml_2009}
 Nils Plath, Marc Toussaint, and Shinichi Nakajima.
 \newblock Multi-class image segmentation using conditional random fields and
