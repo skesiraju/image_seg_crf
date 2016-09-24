@@ -23,11 +23,18 @@ import matplotlib.image as mpimg
 import PIL
 import cv2
 
-import pickle
+from multiprocessing import Pool
+from collections import defaultdict
+from misc.io import chunkify
 
 
 def extract_sift(ifile):
     """ Given image extract sift features """
+
+    pass
+
+
+def extrac_texture_features():
 
     pass
 
@@ -39,11 +46,20 @@ def extract_hsv_features(ifile, pfile):
     img = cv2.imread(ifile)
     p_img = cv2.imread(pfile)
     hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    n_patches = PIL.Image.open(pfile).getcolors()
+
+    pi = PIL.Image.open(pfile)
+
+    n_patches = defaultdict(int)
+    for pixel in pi.getdata():
+        n_patches[pixel] += 1
+
+    if n_patches is None:
+        print("\nNo patches:", pfile)
+        return None
 
     hsv_feats = []
     for p in n_patches:
-        patch_pixels = np.where(p_img == p[1])
+        patch_pixels = np.where(p_img == p[0])
         hsv_values = hsv_img[patch_pixels[0], patch_pixels[1], :]
         hs, _, _ = np.histogram2d(hsv_values[:, 0], hsv_values[:, 1], [10, 10])
         v, _ = np.histogram(hsv_values[:, 2], bins=10)
@@ -53,14 +69,21 @@ def extract_hsv_features(ifile, pfile):
     return np.asarray(hsv_feats)
 
 
+def par_feat_ext(lst):
+
+    patch_subd = os.listdir(patch_dir)
+    for i, ifile in enumerate(lst):
+        print("\r{0:d}/{1:d}".format(i+1, len(lst)), end="")
+        for pd in patch_subd:
+            pfile = patch_dir + pd + "/" + os.path.basename(ifile)
+            hsv_f = extract_hsv_features(image_dir + ifile, pfile)
+            b = os.path.splitext(os.path.basename(ifile))[0]
+            if b is not None:
+                np.save(feat_dir + pd + "/" + b, hsv_f)
+
+
 def main():
     """ main method """
-
-    pwd = os.path.dirname(os.path.realpath(__file__)) + "/"
-
-    image_dir = DATA_PRE + "PPMImages/"
-    patch_dir = DATA_PRE + "patches/"
-    feat_dir = DATA_PRE + "feats/"
 
     # Extract features for each image (patch wise)
     im_files = sorted(os.listdir(image_dir))
@@ -70,19 +93,22 @@ def main():
     for pd in patch_subd:
         os.system("mkdir -p " + feat_dir + pd)
 
-    for i, ifile in enumerate(im_files):
-        print("\r{0:d}/{1:d}".format(i+1, len(im_files)), end="")
-        for pd in patch_subd:
-            pfile = patch_dir + pd + "/" + os.path.basename(ifile)
-            hsv_f = extract_hsv_features(image_dir + ifile, pfile)
-            b = os.path.splitext(os.path.basename(ifile))[0]
-            np.save(feat_dir + pd + "/" + b, hsv_f)
-        # extract_sift(image_dir + ifile)
+    pool = Pool(4)
+    chunks = chunkify(im_files, 4)
+
+    print(len(chunks))
+
+    pool.map(par_feat_ext, chunks)
+    pool.close()
+    pool.join()
 
 
 if __name__ == "__main__":
 
     DATA_PRE = "/home/santosh/Downloads/VOCdevkit/VOC2008/"
+    image_dir = DATA_PRE + "PPMImages/"
+    patch_dir = DATA_PRE + "patches/"
+    feat_dir = DATA_PRE + "feats/"
 
     parser = argparse.ArgumentParser(description=__doc__)
     args = parser.parse_args()
