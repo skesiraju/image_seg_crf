@@ -28,10 +28,19 @@ from collections import defaultdict
 from misc.io import chunkify
 
 
-def extract_sift(ifile):
+def extract_sift(ifile, pfile):
     """ Given image extract sift features """
 
-    pass
+    img = cv2.imread(ifile)
+    gray= cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    sift = cv2.xfeatures2d.SIFT_create()
+
+    kp, des = sift.detectAndCompute(gray, None)
+    print('kp, des:', len(kp), des.shape)
+
+
+
 
 
 def extrac_texture_features():
@@ -74,6 +83,7 @@ def par_feat_ext(lst):
     patch_subd = os.listdir(patch_dir)
     for i, ifile in enumerate(lst):
         print("\r{0:d}/{1:d}".format(i+1, len(lst)), end="")
+        # extract_sift(ifile, pfile)
         for pd in patch_subd:
             pfile = patch_dir + pd + "/" + os.path.basename(ifile)
             hsv_f = extract_hsv_features(image_dir + ifile, pfile)
@@ -93,14 +103,17 @@ def main():
     for pd in patch_subd:
         os.system("mkdir -p " + feat_dir + pd)
 
+    """
     pool = Pool(4)
     chunks = chunkify(im_files, 4)
-
-    print(len(chunks))
 
     pool.map(par_feat_ext, chunks)
     pool.close()
     pool.join()
+    """
+    par_feat_ext([im_files[0]])
+
+
 
 
 if __name__ == "__main__":
