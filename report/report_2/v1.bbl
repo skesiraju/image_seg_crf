@@ -1,0 +1,23 @@
+\begin{thebibliography}{1}
+
+\bibitem{Felzenszwalb:2004}
+P.~F. Felzenszwalb and D.~P. Huttenlocher.
+\newblock Efficient graph-based image segmentation.
+\newblock {\em Int. J. Comput. Vision}, 59(2):167--181, Sept. 2004.
+
+\bibitem{icml_2009}
+N.~Plath, M.~Toussaint, and S.~Nakajima.
+\newblock Multi-class image segmentation using conditional random fields and
+  global classification.
+\newblock In {\em Proceedings of the 26th Annual International Conference on
+  Machine Learning}, ICML '09, pages 817--824, New York, USA, 2009. ACM.
+
+\bibitem{Reynolds:2007}
+J.~Reynolds and K.~Murphy.
+\newblock Figure-ground segmentation using a hierarchical conditional random
+  field.
+\newblock In {\em Proceedings of the Fourth Canadian Conference on Computer and
+  Robot Vision}, CRV '07, pages 175--182, Washington, DC, USA, 2007. IEEE
+  Computer Society.
+
+\end{thebibliography}

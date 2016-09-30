@@ -1,0 +1,22 @@
+\frametitle{Experiments with water and rings}
+
+To see how the \texttt{chemfig} package creates the drawings from your code, let us look at the simple water molecule:
+
+\vskip 0.3cm
+\begin{center}
+\chemfig{H_2O} is created with \verb|\chemfig{H_2O}|
+\end{center}
+
+The simple \LaTeX{} code on the right is automatically converted into the molecular formula for water on the left.
+\vskip 0.3cm
+Rings are similarly easy to code - consider the examples below:
+
+\vskip 0.3cm
+
+\chemfig[][scale=0.5]{A*5(-B-C-D-E-)} = \verb|\chemfig{A*5(-B-C-D-E-)}|
+
+\vskip 0.3cm
+
+\chemfig[][scale=0.5]{*6(=-=-=-)} = \verb|\chemfig{*6(=-=-=-)}|
+
+
