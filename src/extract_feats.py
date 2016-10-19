@@ -14,11 +14,11 @@ from __future__ import print_function
 import os
 import argparse
 
-from random import shuffle
+# from random import shuffle
 import numpy as np
 
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+# import matplotlib.pyplot as plt
+# import matplotlib.image as mpimg
 
 import PIL
 import cv2
@@ -26,21 +26,19 @@ import cv2
 from multiprocessing import Pool
 from collections import defaultdict
 from misc.io import chunkify
+from crf_utils import get_RGB, EXT
 
 
 def extract_sift(ifile, pfile):
     """ Given image extract sift features """
 
     img = cv2.imread(ifile)
-    gray= cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     sift = cv2.xfeatures2d.SIFT_create()
 
     kp, des = sift.detectAndCompute(gray, None)
     print('kp, des:', len(kp), des.shape)
-
-
-
 
 
 def extrac_texture_features():
@@ -52,9 +50,9 @@ def extract_hsv_features(ifile, pfile):
     """ Given img file, and patched img file, return hue-sat 2Dhist and
     val hist for each patch (10x10 + 10 = 110 dim feats)  """
 
-    img = cv2.imread(ifile)
-    p_img = cv2.imread(pfile)
-    hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    img = get_RGB(ifile)
+    p_img = get_RGB(pfile)
+    hsv_img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
 
     pi = PIL.Image.open(pfile)
 
@@ -68,7 +66,7 @@ def extract_hsv_features(ifile, pfile):
 
     hsv_feats = []
     for p in n_patches:
-        patch_pixels = np.where(p_img == p[0])
+        patch_pixels = np.where((p_img == p).all(axis=2))
         hsv_values = hsv_img[patch_pixels[0], patch_pixels[1], :]
         hs, _, _ = np.histogram2d(hsv_values[:, 0], hsv_values[:, 1], [10, 10])
         v, _ = np.histogram(hsv_values[:, 2], bins=10)
@@ -82,6 +80,8 @@ def par_feat_ext(lst):
 
     patch_subd = os.listdir(patch_dir)
     for i, ifile in enumerate(lst):
+        if ifile[-4:] != EXT:
+                continue
         print("\r{0:d}/{1:d}".format(i+1, len(lst)), end="")
         # extract_sift(ifile, pfile)
         for pd in patch_subd:
@@ -103,17 +103,14 @@ def main():
     for pd in patch_subd:
         os.system("mkdir -p " + feat_dir + pd)
 
-    """
     pool = Pool(4)
     chunks = chunkify(im_files, 4)
 
     pool.map(par_feat_ext, chunks)
     pool.close()
     pool.join()
-    """
-    par_feat_ext([im_files[0]])
 
-
+    # par_feat_ext(im_files)
 
 
 if __name__ == "__main__":

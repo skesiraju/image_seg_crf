@@ -19,6 +19,7 @@ import warnings
 from multiprocessing import Pool
 from collections import defaultdict
 from misc.io import chunkify, read_simple_flist
+from crf_utils import get_RGB
 
 
 def get_descriptors(ifile):
@@ -125,12 +126,11 @@ def compute_patch_sift_hist(ifile, pfile, f_c_ixs):
                 flag = True
         return flag
 
-    # img = cv2.imread(ifile)
     fid = os.path.splitext(os.path.basename(ifile))[0]
 
     kpts = pickle.load(open(feat_dir + "kp/kp_" + fid + ".pkl", "rb"))
 
-    p_img = cv2.imread(pfile)
+    p_img = get_RGB(pfile)
 
     pi = PIL.Image.open(pfile)
     n_patches = defaultdict(int)
@@ -143,7 +143,7 @@ def compute_patch_sift_hist(ifile, pfile, f_c_ixs):
 
     hist_feats = []
     for p in n_patches:
-        patch_pixels = np.where(p_img == p[0])
+        patch_pixels = np.where((p_img == p).all(axis=2))
         patch_cixs = []
 
         for kp_ix, kp in enumerate(kpts):
@@ -204,6 +204,7 @@ def main():
         pool.map(parallel_sift_hist_feat_ext, chunks)
         pool.close()
         pool.join()
+
         # parallel_sift_hist_feat_ext(chunks[0])
 
     else:

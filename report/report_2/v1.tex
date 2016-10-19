@@ -102,14 +102,14 @@
     \item Compute global feature vector.
     \item Use SVM to predict class of each patch.
     \item Build a CRF model, where the patch labels are dependent on each other.
-    \item Apply threshold on the posteriors from the CRF to obtain final segmentation.        
+    \item Apply threshold on the posteriors from the CRF to obtain final segmentation at patch level.        
   \end{enumerate}
 \end{frame}
 
 \begin{frame}{Step 1: Pre-segmentation}
     \begin{itemize}
         \item Pre-segment the image using graph cut minimization formulation \cite{Felzenszwalb:2004}.
-        \item Segmentation is done at different scales (finer to coarser) by adjusting the parameters of the algorithm.        
+        \item Segmentation is done at different scales (finer to coarser) by adjusting the parameters (smoothing, similarity threshold, minimum patch size) of the algorithm.        
     \end{itemize}
     \begin{figure}[!hbp]
         \centering
