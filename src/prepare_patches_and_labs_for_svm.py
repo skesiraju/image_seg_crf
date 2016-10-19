@@ -11,17 +11,18 @@ for each object label and train N different SVMs
 with chi^2 kernel.
 """
 
-from crf_utils import ANNOT_DIR, feat_dir, DATA_PRE, patch_dir, save_fids
-from crf_utils import get_RGB, N_LABELS
+from crf_utils import ANNOT_DIR, EXT, FEAT_DIR, DATA_PRE, PATCH_DIR, SEG_DIR
+from crf_utils import N_LABELS, CREAM, BGR
+from crf_utils import get_RGB, save_fids, get_patch_info
+
 import xml.etree.ElementTree as ET
 import os
 import pickle
-import sys
-import cv2
-import PIL
 import numpy as np
 from collections import defaultdict
 from random import shuffle
+from multiprocessing import Pool
+from misc.io import read_simple_flist, chunkify
 
 
 def get_object_name_and_bbox(afile):
@@ -87,15 +88,6 @@ def parse_annotations(etc_d):
     print('No of labels:', len(obj_names))
 
     return fid_obj, fid_box, obj_names
-
-
-def get_patch_info(pfile):
-
-    pi = PIL.Image.open(pfile)
-    n_patches = defaultdict(int)
-    for pixel in pi.getdata():
-        n_patches[pixel] += 1
-    return n_patches
 
 
 def get_me_the_label(pixels, box, labs):
@@ -186,86 +178,96 @@ def find_overlap_with_gt(pt_pixels, gp_label, fid):
     return patch_label
 
 
+def parallel_data_prep_svm(lst_fids):
+
+    patch_subd = os.listdir(PATCH_DIR)
+
+    for fid in lst_fids:
+
+        patch_label_lst = []
+        for pd in patch_subd:
+
+            pfile = PATCH_DIR + pd + "/" + fid + EXT
+            p_part = "/".join(pfile.replace(EXT, "").split("/")[-2:])
+            p_img = get_RGB(pfile)
+            n_patches = get_patch_info(pfile)
+
+            for p in n_patches:
+
+                patch_pixels = np.where((p_img == p).all(axis=2))
+
+                # find out the label of this patch_pixels
+                # using manual segmentation info
+                patch_label = find_overlap_with_gt(patch_pixels, GP_LABEL, fid)
+                patch_label_lst.append([patch_label, p, p_part])
+
+                # print(patch_label, p, p_part)
+
+        pickle.dump(patch_label_lst, open(FEAT_DIR + "svm/" + fid + ".pkl",
+                                          "wb"))
+
+
 def main():
     """ main """
 
-    etc_d = feat_dir + "etc/"
+    global GP_LABEL
 
-    # 1.
-    # fid_obj, fid_box, obj_names = parse_annotations(etc_d)
+    etc_d = FEAT_DIR + "etc/"
 
-    fid_obj = pickle.load(open(etc_d + "fid_obj.pkl", "rb"))
-    fid_box = pickle.load(open(etc_d + "fid_box.pkl", "rb"))
-    obj_names = pickle.load(open(etc_d + "obj_names.pkl", "rb"))
+    if os.path.exists(etc_d + "fid_obj.pkl") is False:
+        fid_obj, fid_box, obj_names = parse_annotations(etc_d)
 
-    # 2. for each patched image in scale
-    # for each patch, check
+    if os.path.exists(etc_d + "gp_label.pkl") is False:
 
-    gp_label = get_gt_label_info(fid_box, fid_obj)
-    # from pprint import pprint
-    # pprint(gp_label)
-    # pickle.dump(gp_label, open(etc_d + "gp_label.pkl", "wb"))
+        fid_obj = pickle.load(open(etc_d + "fid_obj.pkl", "rb"))
+        fid_box = pickle.load(open(etc_d + "fid_box.pkl", "rb"))
 
-    gp_label = pickle.load(open(etc_d + "gp_label.pkl", "rb"))
+        GP_LABEL = get_gt_label_info(fid_box, fid_obj)
+        from pprint import pprint
+        pprint(GP_LABEL)
+        pickle.dump(GP_LABEL, open(etc_d + "gp_label.pkl", "wb"))
 
-    gt_files = os.listdir(SEG_DIR)
-    patch_subd = os.listdir(patch_dir)
+    else:
+        GP_LABEL = pickle.load(open(etc_d + "gp_label.pkl", "rb"))
+        print("GP label:", len(GP_LABEL))
 
-    fids = [gtf.split(".")[0] for gtf in gt_files]
-    shuffle(fids)
+    if os.path.exists(etc_d + "train.flist") is False:
+        print("* Generating train and test splits .....")
+        gt_files = os.listdir(SEG_DIR)
+        fids = [gtf.split(".")[0] for gtf in gt_files]
+        shuffle(fids)
 
-    train_size = int(len(fids) * 0.8)
-    train_fids = fids[:train_size]
-    test_fids = fids[train_size:]
+        train_size = int(len(fids) * 0.8)
+        train_fids = fids[:train_size]
+        test_fids = fids[train_size:]
 
-    print("Trian, test, total:", len(train_fids), len(test_fids), len(fids))
-    train_dir = DATA_PRE + "train/"
-    test_dir = DATA_PRE + "test/"
+        print("Trian, test, total:", len(train_fids), len(test_fids),
+              len(fids))
 
-    os.makedirs(train_dir, exist_ok=True)
-    os.makedirs(test_dir, exist_ok=True)
+        save_fids(train_fids, etc_d + "train.flist")
+        save_fids(test_fids, etc_d + "test.flist")
+        save_fids(train_fids + test_fids, etc_d + "all.flist")
 
-    save_fids(train_fids, etc_d + "train.flist")
-    save_fids(test_fids, etc_d + "test.flist")
+    else:
 
-    for fid in train_fids:
+        train_fids = read_simple_flist(etc_d + "train.flist")
+        test_fids = read_simple_flist(etc_d + "test.flist")
 
-        fid = "2007_004112"
-        for pd in patch_subd:
+    svm_dir = FEAT_DIR + "svm/"
+    os.makedirs(svm_dir, exist_ok=True)
 
-            pfile = patch_dir + pd + "/" + fid + EXT
-            # print(pfile)
-            p_img = get_RGB(pfile)
+    all_fids = train_fids + test_fids
+    print("File IDs:", len(all_fids))
 
-            n_patches = get_patch_info(pfile)
-            # print("NP:", len(n_patches))
+    chunks = chunkify(all_fids, 4)
 
-            for p in n_patches:
-                # print('p:', p, 'p_img:', p_img.shape)
-                patch_pixels = np.where((p_img == p).all(axis=2))
-                # print('pp:', patch_pixels)
-
-                pt_xy = [(x, y) for x, y in zip(patch_pixels[0],
-                                                patch_pixels[1])]
-
-                # find out the label of this patch_pixels
-                # using annotation box and manual segmentation info
-                patch_label = find_overlap_with_gt(patch_pixels, gp_label, fid)
-                print("== patch ", patch_label, p, "==")
-
-                # break
-            break
-        break
-
-
+    pool = Pool(4)
+    pool.map(parallel_data_prep_svm, chunks)
+    pool.close()
+    pool.join()
 
 
 if __name__ == "__main__":
 
-    SEG_DIR = DATA_PRE + "SegmentationClass_PPM/"
-    EXT= ".ppm"
-    CREAM = (224, 224, 192)
-    BGR = (0, 0, 0)
-    IGN = [CREAM, BGR]
+    GP_LABEL = {}
     main()
-

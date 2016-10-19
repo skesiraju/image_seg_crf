@@ -205,6 +205,7 @@ def main():
 
         pool = Pool(4)
         pool.map(parallel_sift_hist_feat_ext, chunks)
+        pool.close()
         pool.join()
 
         # parallel_sift_hist_feat_ext(chunks[0])
