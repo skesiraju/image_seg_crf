@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-
 # Created on Sat Oct 15 14:28:46 2016
-
-# @author: santosh, srikanth
+# @authors: Santosh, Srikanth
 
 """
 Parse annotations XML file, get object boundaries,
@@ -12,16 +10,17 @@ with chi^2 kernel.
 """
 
 from crf_utils import ANNOT_DIR, EXT, FEAT_DIR, DATA_PRE, PATCH_DIR, SEG_DIR
-from crf_utils import N_LABELS, CREAM, BGR
+from crf_utils import N_LABELS, CREAM, BGR, BGR_LABEL
 from crf_utils import get_RGB, save_fids, get_patch_info
 
+import argparse
 import xml.etree.ElementTree as ET
 import os
 import pickle
 import numpy as np
 from collections import defaultdict
 from random import shuffle
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from misc.io import read_simple_flist, chunkify
 
 
@@ -66,19 +65,12 @@ def parse_annotations(etc_d):
         for o in obj_lst:
             if o not in obj_names:
                 obj_names.append(o)
-                obj_ixs.append(len(obj_names)-1)
+                obj_ixs.append(len(obj_names))
             else:
-                obj_ixs.append(obj_names.index(o))
+                obj_ixs.append(obj_names.index(o)+1)
 
         fid_obj[fid] = obj_ixs
         fid_box[fid] = box_lst
-
-    """
-    from pprint import pprint
-    pprint(fid_obj)
-    pprint(fid_box)
-    pprint(obj_names)
-    """
 
     pickle.dump(fid_obj, open(etc_d + "fid_obj.pkl", "wb"))
     pickle.dump(fid_box, open(etc_d + "fid_box.pkl", "wb"))
@@ -123,7 +115,7 @@ def get_gt_label_info(fid_box, fid_obj):
             if gp == CREAM:
                 continue
             elif gp == BGR:
-                label = N_LABELS + 1
+                label = BGR_LABEL
             else:
                 gt_pixels = np.where((g_img == gp).all(axis=2))
                 box = fid_box[fid]
@@ -139,7 +131,7 @@ def get_gt_label_info(fid_box, fid_obj):
 def find_overlap_with_gt(pt_pixels, gp_label, fid):
     """ Find overlap of unsupervised patch with the ground truth patch """
 
-    patch_label = N_LABELS + 1
+    patch_label = BGR_LABEL
 
     pt_xy = [(x, y) for x, y in zip(pt_pixels[0], pt_pixels[1])]
     gt_file = SEG_DIR + fid + EXT
@@ -163,15 +155,17 @@ def find_overlap_with_gt(pt_pixels, gp_label, fid):
                 patch_label = None
 
             elif gp == BGR:
-                patch_label = N_LABELS + 1
+                patch_label = BGR_LABEL
 
             else:
                 patch_label = gp_label[gp]
 
+            break  # if > 75 overlap is found, return the label
+
         else:
 
             if gp == CREAM:
-                patch_label = N_LABELS + 1
+                patch_label = BGR_LABEL
             else:
                 patch_label = int(-1 * gp_label[gp])
 
@@ -179,7 +173,10 @@ def find_overlap_with_gt(pt_pixels, gp_label, fid):
 
 
 def parallel_data_prep_svm(lst_fids):
+    """ Save label information for each patch at each scale level.
+    Parallel execution """
 
+    info_dir = FEAT_DIR + "patch_label_info/"
     patch_subd = os.listdir(PATCH_DIR)
 
     for fid in lst_fids:
@@ -203,8 +200,72 @@ def parallel_data_prep_svm(lst_fids):
 
                 # print(patch_label, p, p_part)
 
-        pickle.dump(patch_label_lst, open(FEAT_DIR + "svm/" + fid + ".pkl",
-                                          "wb"))
+        pickle.dump(patch_label_lst, open(info_dir + fid + ".pkl", "wb"))
+
+
+
+def parallel_feat_map(info_files):
+    """ Map patch labels and color and histogram features and save them
+    respective sub directories. Parallel execution """
+
+    sub_patch_dir = os.listdir(PATCH_DIR)
+
+    for f in info_files:
+        lst = pickle.load(open(info_d + f, 'rb'))
+
+        label_dict = {}
+        patch_dict = {}
+        patch_feat_dict = {}
+        for i, el in enumerate(lst):
+
+            lab = el[0]  # object label 
+            patch = el[1]  # patch color
+            ppath = el[2]  # partial path
+            p_config = ppath.split("/")[0]
+
+            try:
+                n_patches = patch_dict[ppath]
+
+            except KeyError:                
+
+                p_file = PATCH_DIR + ppath + EXT
+                n_patches = get_patch_info(p_file)
+                patch_dict[ppath] = n_patches  # put patch info in dict
+
+            c_file = color_d + ppath + ".npy"
+            h_file = hist_d + ppath + ".npy"              
+
+            c_map = pickle.load(open(c_file.replace("npy", "pkl"), "rb"))
+            h_map = pickle.load(open(h_file.replace("npy", "pkl"), "rb"))
+
+            c_feat = np.load(c_file)[c_map.index(patch), :]
+            h_feat = np.load(h_file)[h_map.index(patch), :]
+
+            a_feat = np.concatenate((c_feat, h_feat))            
+
+            patch_feat_dict = {}
+            try:
+                patch_feat_dict = label_dict[lab]
+                try:
+                    patch_feat_dict[p_config].append(a_feat)
+                    
+                except KeyError:
+                    patch_feat_dict[p_config] = [a_feat]
+
+            except KeyError:
+                patch_feat_dict[p_config] = [a_feat]            
+            
+            label_dict[lab] = patch_feat_dict         
+                         
+        for lab, pf_dict in label_dict.items():
+
+            for p_conf, feats in pf_dict.items():
+
+                lab_d = train_d + p_conf + "/" + "l_" + str(lab) + "/"
+                os.makedirs(lab_d, exist_ok=True)
+
+                fname = lab_d + os.path.basename(f).split(".")[0] + ".npy"
+                np.save(fname, np.asarray(feats))
 
 
 def main():
@@ -214,10 +275,11 @@ def main():
 
     etc_d = FEAT_DIR + "etc/"
 
-    if os.path.exists(etc_d + "fid_obj.pkl") is False:
+    if args.choice == "annot":   
+
         fid_obj, fid_box, obj_names = parse_annotations(etc_d)
 
-    if os.path.exists(etc_d + "gp_label.pkl") is False:
+    elif args.choice == "gt":
 
         fid_obj = pickle.load(open(etc_d + "fid_obj.pkl", "rb"))
         fid_box = pickle.load(open(etc_d + "fid_box.pkl", "rb"))
@@ -227,47 +289,82 @@ def main():
         pprint(GP_LABEL)
         pickle.dump(GP_LABEL, open(etc_d + "gp_label.pkl", "wb"))
 
-    else:
+    elif args.choice == "prep":
+
         GP_LABEL = pickle.load(open(etc_d + "gp_label.pkl", "rb"))
-        print("GP label:", len(GP_LABEL))
+        print("GP labels:", len(GP_LABEL))
 
-    if os.path.exists(etc_d + "train.flist") is False:
-        print("* Generating train and test splits .....")
-        gt_files = os.listdir(SEG_DIR)
-        fids = [gtf.split(".")[0] for gtf in gt_files]
-        shuffle(fids)
+        if os.path.exists(etc_d + "train.flist") is False:
+            print("* Generating train and test splits .....")
+            gt_files = os.listdir(SEG_DIR)
+            fids = [gtf.split(".")[0] for gtf in gt_files]
+            shuffle(fids)
 
-        train_size = int(len(fids) * 0.8)
-        train_fids = fids[:train_size]
-        test_fids = fids[train_size:]
+            train_size = int(len(fids) * 0.8)
+            train_fids = fids[:train_size]
+            test_fids = fids[train_size:]
 
-        print("Trian, test, total:", len(train_fids), len(test_fids),
-              len(fids))
+            print("Trian, test, total:", len(train_fids), len(test_fids),
+                  len(fids))
 
-        save_fids(train_fids, etc_d + "train.flist")
-        save_fids(test_fids, etc_d + "test.flist")
-        save_fids(train_fids + test_fids, etc_d + "all.flist")
+            save_fids(train_fids, etc_d + "train.flist")
+            save_fids(test_fids, etc_d + "test.flist")
+            save_fids(train_fids + test_fids, etc_d + "all.flist")
 
-    else:
+        else:
 
-        train_fids = read_simple_flist(etc_d + "train.flist")
-        test_fids = read_simple_flist(etc_d + "test.flist")
+            train_fids = read_simple_flist(etc_d + "train.flist")
+            test_fids = read_simple_flist(etc_d + "test.flist")
 
-    svm_dir = FEAT_DIR + "svm/"
-    os.makedirs(svm_dir, exist_ok=True)
+        info_dir = FEAT_DIR + "patch_label_info/"
+        os.makedirs(info_dir, exist_ok=True)
 
-    all_fids = train_fids + test_fids
-    print("File IDs:", len(all_fids))
+        all_fids = train_fids + test_fids
+        print("File IDs:", len(all_fids))
 
-    chunks = chunkify(all_fids, 4)
+        n_jobs = int(cpu_count() / 2)
 
-    pool = Pool(4)
-    pool.map(parallel_data_prep_svm, chunks)
-    pool.close()
-    pool.join()
+        if n_jobs > 10:
+            n_jobs = 20
 
+        print('n_jobs:', n_jobs)
+
+        chunks = chunkify(all_fids, n_jobs)
+        
+        pool = Pool(n_jobs)
+        pool.map(parallel_data_prep_svm, chunks)
+        pool.close()
+        pool.join()
+
+
+    elif args.choice == "map":
+
+        os.system("mkdir -p " + train_d)
+        
+        info_files = os.listdir(info_d)
+        print("Info files:", len(info_files))
+    
+        n_jobs = int(cpu_count() / 2)
+        chunks = chunkify(info_files, n_jobs)
+
+        # parallel_feat_map(info_files[:2])
+        
+        p = Pool(n_jobs)
+        p.map(parallel_feat_map, chunks)
+        p.close()
+        p.join()     
 
 if __name__ == "__main__":
 
     GP_LABEL = {}
+
+    hist_d = FEAT_DIR + "hist_feats/"
+    color_d = FEAT_DIR + "color_feats/"
+    info_d = FEAT_DIR + "patch_label_info/"
+    train_d = FEAT_DIR + "train/"
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("choice", help="feats or cluster")
+    args = parser.parse_args()
+
     main()

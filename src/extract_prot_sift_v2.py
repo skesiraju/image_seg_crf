@@ -16,7 +16,7 @@ import PIL
 import cv2
 from sklearn.cluster import MiniBatchKMeans
 import warnings
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from collections import defaultdict
 from misc.io import chunkify, read_simple_flist
 from crf_utils import get_RGB
@@ -143,6 +143,7 @@ def compute_patch_sift_hist(ifile, pfile, f_c_ixs):
         return None
 
     hist_feats = []
+    patch_colors = []
     for p in n_patches:
         patch_pixels = np.where((p_img == p).all(axis=2))
         patch_cixs = []
@@ -153,14 +154,16 @@ def compute_patch_sift_hist(ifile, pfile, f_c_ixs):
 
         h, _ = np.histogram(patch_cixs, bins=1000)
         hist_feats.append(h)
+        patch_colors.append(p)
 
     hist_feats = np.asarray(hist_feats)
-    return hist_feats
+    return hist_feats, patch_colors
 
 
 def parallel_sift_hist_feat_ext(lst):
     """ Parallel SIFT histogram feature extraction """
 
+    hist_dir = FEAT_DIR + "hist_feats/"
     kp_index = np.load(FEAT_DIR + "kp_index.npy")
     c_ixs = np.load(FEAT_DIR + "sift_vq.npy")
     train_fids = read_simple_flist(ETC_D + "all.flist")
@@ -177,11 +180,12 @@ def parallel_sift_hist_feat_ext(lst):
 
         for pd in patch_subd:
             pfile = PATCH_DIR + pd + "/" + fid + EXT
-            patch_hist_feats = compute_patch_sift_hist(IMAGE_DIR + ifile,
+            p_hist_f, p_clr = compute_patch_sift_hist(IMAGE_DIR + ifile,
                                                        pfile, f_c_ixs)
 
-            np.save(FEAT_DIR + "hist_feats/" + pd + "/" + fid + ".npy",
-                    patch_hist_feats)
+            np.save(hist_dir + pd + "/" + fid + ".npy", p_hist_f)
+
+            pickle.dump(p_clr, open(hist_dir + pd + "/" + fid + ".pkl", "wb"))
 
 
 def main():
@@ -201,9 +205,9 @@ def main():
         all_fids = read_simple_flist(ETC_D + "all.flist")
 
         print("File IDs:", len(all_fids))
-        chunks = chunkify(all_fids, 4)
+        chunks = chunkify(all_fids, int(cpu_count()/2))
 
-        pool = Pool(4)
+        pool = Pool(int(cpu_count()/2))
         pool.map(parallel_sift_hist_feat_ext, chunks)
         pool.close()
         pool.join()

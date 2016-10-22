@@ -12,6 +12,7 @@ Color feature extraction
 from __future__ import print_function
 import os
 import argparse
+import pickle
 
 # from random import shuffle
 import numpy as np
@@ -19,7 +20,7 @@ import numpy as np
 # import matplotlib.pyplot as plt
 # import matplotlib.image as mpimg
 
-import PIL
+from PIL import Image
 import cv2
 
 from multiprocessing import Pool
@@ -41,7 +42,7 @@ def extract_hsv_features(ifile, pfile):
     p_img = get_RGB(pfile)
     hsv_img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
 
-    pi = PIL.Image.open(pfile)
+    pi = Image.open(pfile)
 
     n_patches = defaultdict(int)
     for pixel in pi.getdata():
@@ -52,6 +53,7 @@ def extract_hsv_features(ifile, pfile):
         return None
 
     hsv_feats = []
+    patch_colors = []
     for p in n_patches:
         patch_pixels = np.where((p_img == p).all(axis=2))
         hsv_values = hsv_img[patch_pixels[0], patch_pixels[1], :]
@@ -59,12 +61,14 @@ def extract_hsv_features(ifile, pfile):
         v, _ = np.histogram(hsv_values[:, 2], bins=10)
         hist_fea = np.concatenate((hs.reshape(100,), v))
         hsv_feats.append(hist_fea)
+        patch_colors.append(p)
 
-    return np.asarray(hsv_feats)
+    return np.asarray(hsv_feats), patch_colors
 
 
 def par_feat_ext(lst):
 
+    color_dir = FEAT_DIR + "color_feats/"
     patch_subd = os.listdir(PATCH_DIR)
     for i, ifile in enumerate(lst):
         if ifile[-4:] != EXT:
@@ -73,10 +77,12 @@ def par_feat_ext(lst):
         # extract_sift(ifile, pfile)
         for pd in patch_subd:
             pfile = PATCH_DIR + pd + "/" + os.path.basename(ifile)
-            hsv_f = extract_hsv_features(IMAGE_DIR + ifile, pfile)
+            hsv_f, p_clr = extract_hsv_features(IMAGE_DIR + ifile, pfile)
             b = os.path.splitext(os.path.basename(ifile))[0]
             if b is not None:
-                np.save(FEAT_DIR + "color_feats/" + pd + "/" + b, hsv_f)
+                np.save(color_dir + pd + "/" + b, hsv_f)
+                pickle.dump(p_clr,
+                            open(color_dir + pd + "/" + b + ".pkl", "wb"))
 
 
 def main():
@@ -87,12 +93,12 @@ def main():
     os.system("mkdir -p " + FEAT_DIR + "color_feats/")
 
     patch_subd = os.listdir(PATCH_DIR)
-
+    print(patch_subd)
     for pd in patch_subd:
-        os.system("mkdir -p " + FEAT_DIR + pd)
+        os.system("mkdir -p " + FEAT_DIR + "color_feats/" + pd)
 
-    pool = Pool(4)
-    chunks = chunkify(im_files, 4)
+    pool = Pool(16)
+    chunks = chunkify(im_files, 16)
 
     pool.map(par_feat_ext, chunks)
     pool.close()
