@@ -54,8 +54,8 @@ def feat_ext():
     print("Files:", len(train_flist))
     os.system("mkdir -p " + FEAT_DIR + "kp/")
     train_fids = []
-    all_d = []
     all_k = []
+    all_d = []
     file_kp_size = []
 
     st = 0
@@ -71,12 +71,18 @@ def feat_ext():
 
         k, d = get_descriptors(tf)
 
+        all_k = [kp.pt for kp in k]
         all_d.append(d)  # append all desc into one list
+
+        # print(len(k), d.shape)
 
         # get the file ID (unique key) of the image
         train_fids.append(fid)
 
         pickle.dump(all_k, open(kp_file, "wb"))
+
+        # import sys
+        # sys.exit()
 
         # save file ID to no of key points in dict
         file_kp_size.append([st, st + len(k)])
@@ -181,7 +187,7 @@ def parallel_sift_hist_feat_ext(lst):
         for pd in patch_subd:
             pfile = PATCH_DIR + pd + "/" + fid + EXT
             p_hist_f, p_clr = compute_patch_sift_hist(IMAGE_DIR + ifile,
-                                                       pfile, f_c_ixs)
+                                                      pfile, f_c_ixs)
 
             np.save(hist_dir + pd + "/" + fid + ".npy", p_hist_f)
 
