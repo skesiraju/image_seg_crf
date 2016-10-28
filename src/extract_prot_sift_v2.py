@@ -158,11 +158,20 @@ def compute_patch_sift_hist(ifile, pfile, f_c_ixs):
             if is_kp_in_patch(patch_pixels, kp):
                 patch_cixs.append(f_c_ixs[kp_ix])
 
-        h, _ = np.histogram(patch_cixs, bins=1000)
-        hist_feats.append(h)
-        patch_colors.append(p)
+        # print(patch_cixs)
+        if len(patch_cixs) > 0:
+            # print(patch_cixs)
+            h, _ = np.histogram(patch_cixs, bins=np.arange(0, 1001))
+            # print(h.shape)
+            # print(h)
+            # break
+            hist_feats.append(h)
+            patch_colors.append(p)
+
+        # break
 
     hist_feats = np.asarray(hist_feats)
+    # print(hist_feats.shape, np.count_nonzero(hist_feats))
     return hist_feats, patch_colors
 
 
@@ -172,7 +181,7 @@ def parallel_sift_hist_feat_ext(lst):
     hist_dir = FEAT_DIR + "hist_feats/"
     kp_index = np.load(FEAT_DIR + "kp_index.npy")
     c_ixs = np.load(FEAT_DIR + "sift_vq.npy")
-    train_fids = read_simple_flist(ETC_D + "all.flist")
+    train_fids = read_simple_flist(ETC_D + "all_sift.flist")
 
     patch_subd = os.listdir(PATCH_DIR)
     for i, fid in enumerate(lst):
@@ -192,6 +201,8 @@ def parallel_sift_hist_feat_ext(lst):
             np.save(hist_dir + pd + "/" + fid + ".npy", p_hist_f)
 
             pickle.dump(p_clr, open(hist_dir + pd + "/" + fid + ".pkl", "wb"))
+
+        # break
 
 
 def main():

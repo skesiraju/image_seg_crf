@@ -9,9 +9,8 @@
 SVM with chi^2 kernel
 """
 
-import os 
-import sys 
-import argparse 
+import os
+import argparse
 import pickle
 import numpy as np
 
@@ -23,18 +22,18 @@ from sklearn.base import TransformerMixin
 from sklearn.svm import SVC
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import StratifiedKFold
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics.pairwise import chi2_kernel
 
-from crf_utils import PATCH_DIR, FEAT_DIR, BGR_LABEL, N_LABELS, SCALE_CONFIGS
-from crf_utils import AB_LS, sigmoid, shuffle_data_and_labels
+from crf_utils import FEAT_DIR, BGR_LABEL, N_LABELS
+from crf_utils import shuffle_data_and_labels
 
 from misc.io import chunkify
 
 
 class CustomCHI(TransformerMixin):
 
-    def __init__(self, gamma=1.0):   
+    def __init__(self, gamma=1.0):
         self.gamma = gamma
 
     def fit(self, X):
@@ -44,10 +43,10 @@ class CustomCHI(TransformerMixin):
 
     def fit_transform(self, X):
         self.fit(X)
-        return chi2_kernel(X_train, gamma=self.gamma)
+        return chi2_kernel(X, gamma=self.gamma)
 
     def transform(self, X):
-        return chi2_kernel(X_train, gamma=self.gamma)
+        return chi2_kernel(X, gamma=self.gamma)
 
     @property
     def gamma(self):
@@ -56,7 +55,6 @@ class CustomCHI(TransformerMixin):
     @gamma.setter
     def gamma(self, value):
         self._gamma = value
-        
 
 
 def get_njobs(flag=True):
@@ -65,12 +63,12 @@ def get_njobs(flag=True):
     if flag and nj > 10:
         nj = 20
     return nj
-    
+
 
 def load_training_data(input_fpaths):
 
     return np.concatenate([np.load(f) for f in input_fpaths])
-    
+
 
 def balance_data(data1, data2_size, fx):
 
@@ -80,14 +78,16 @@ def balance_data(data1, data2_size, fx):
     df = data2_size - data1.shape[0]
     ixs = np.zeros(data1.shape[0], dtype=int)
     ixs[:df] = np.ones(df, dtype=int)
-    data11 = np.repeat(data1, ixs, axis=0)                    
+    data11 = np.repeat(data1, ixs, axis=0)
     data1 = np.concatenate((data1, data11))
 
     return data1
 
+
 def get_pos_neg_data(pos_class_dir, neg_class_dirs):
 
     orig_data = []
+    orig_labels = []
     if os.path.exists(pos_class_dir):
         pos_files = os.listdir(pos_class_dir)
         pos_fpaths = [pos_class_dir + f for f in pos_files]
@@ -103,15 +103,16 @@ def get_pos_neg_data(pos_class_dir, neg_class_dirs):
             neg_fpaths += [nd + f for f in neg_files]
 
         neg_data = load_training_data(neg_fpaths)
-        print('p:', pos_data.shape, 'n:', neg_data.shape)
         orig_data = np.concatenate((pos_data, neg_data))
+        orig_labels = np.concatenate(([1] * pos_data.shape[0],
+                                      [2] * neg_data.shape[0]))
 
         fx = neg_data.shape[0] / pos_data.shape[0]
         if fx > 1:
-            pos_data = balance_data(pos_data, neg_data.shape[0], floor(fx))                    
+            pos_data = balance_data(pos_data, neg_data.shape[0], floor(fx))
         elif fx < 0:
-            print("Repeating negative class data. Strange !!", 
-                  pos_data.shape, neg_data.shape, pre_d)
+            print("Repeating negative class data. Strange !!",
+                  pos_data.shape, neg_data.shape)
             neg_data = balance_data(neg_data, pos_data.shape[0], floor(1/fx))
         else:
             pass
@@ -119,19 +120,19 @@ def get_pos_neg_data(pos_class_dir, neg_class_dirs):
     else:
         print(pos_class_dir, "not found.")
 
-    return pos_data, neg_data, orig_data
+    return pos_data, neg_data, orig_data, orig_labels
 
 
 def grid_cv(X, y, k=5):
     """ Grid search over param space with k-fold cross validation """
 
-    K = chi2_kernel(X)    
+    K = chi2_kernel(X)
 
-    pipeline = Pipeline([('clf', SVC(kernel='precomputed')), ])    
+    pipeline = Pipeline([('clf', SVC(kernel='precomputed')), ])
 
-    params = {'clf__C': (1e-2, 1e-1, 1, 1e+1, 1e+2),}
+    params = {'clf__C': (1e-2, 1e-1, 1, 1e+1, 1e+2), }
 
-    grid_search = GridSearchCV(pipeline, params, n_jobs=4,
+    grid_search = GridSearchCV(pipeline, params, n_jobs=1,
                                verbose=0, cv=k)
 
     grid_search.fit(K, y)
@@ -141,98 +142,127 @@ def grid_cv(X, y, k=5):
     return best_params, grid_search.best_score_
 
 
-def svm_with_cv(data, labels, scale_conf):
+def svm_with_cv(data, labels):
     """ SVM with chi2 kernel and 5 fold cross validation """
-  
+
     best_params, best_cv_score = grid_cv(data, labels)
-    print('CV:', best_cv_score, best_params['clf__C'])
+    if ARGS.verbose:
+        print('CV:', best_cv_score, best_params['clf__C'])
 
     svm_clf = SVC(C=best_params['clf__C'], kernel='precomputed')
-                   
-    K = chi2_kernel(data)
 
-    svm_clf = svm_clf.fit(K, labels)
+    gram_matrix = chi2_kernel(data)
 
-    return svm_clf
+    svm_clf = svm_clf.fit(gram_matrix, labels)
+
+    # Train a logistic regression to convert the output of
+    # SVM into probabilities
+    out = svm_clf.decision_function(K)
+    out = out.reshape(-1, 1)
+
+    # print('out:', out.shape, 'labels:', labels.shape)
+
+    lr_clf = LogisticRegression()
+    lr_clf.fit(out, labels)
+
+    if ARGS.verbose:
+        lr_pred = lr_clf.predict(out)
+        print("LR:", np.mean(labels == lr_pred))
+
+    return svm_clf, lr_clf
 
 
-def predict_features(train_data, test_data, svm_clf, scale_conf):
+def predict_features(train_data, test_data, test_labels, clfs):
+    """ Predict class probabilites for a given set of test features.
+    SVM followed by logistic regression """
 
-    K = chi2_kernel(test_data, train_data)
+    svm_clf, lr_clf = clfs
 
-    # y_out has perpendicular distance between decision boundary and each point
-    y_out = svm_clf.decision_function(K)    
+    gram_matrix = chi2_kernel(test_data, train_data)
 
-    ix = SCALE_CONFIGS.index(scale_conf)
-    a_l, b_l = AB_LS[ix]
+    # y_out has perpendicular distances between decision boundary
+    # and each point
+    y_out = svm_clf.decision_function(gram_matrix)
+    y_out = y_out.reshape(-1, 1)
 
     # convert the above distances into probabilities
-    y_prob = sigmoid(y_out, a_l, b_l)
+    y_prob = lr_clf.predict_proba(y_out)
+
+    if ARGS.verbose:
+        y_pred = lr_clf.predict(y_out)
+        print("LR test acc:", np.mean(y_pred == test_labels))
 
     return y_prob
 
 
 def parallel_svm(label_lst):
+    """ Train SVMs parallely """
 
-    global cur_sd
-
-    sd = cur_sd
-
-    lab_dirs = os.listdir(TRAIN_DIR + sd)
+    # lab_dirs = os.listdir(TRAIN_DIR + sd)
     pre_d = TRAIN_DIR + sd + "/l_"
 
     for lab in label_lst:
 
+        out_dir = SVM_MODEL_DIR + sd + "/l_" + str(lab) + "/"
+        os.system("mkdir -p " + out_dir)
+
+        if os.path.exists(out_dir + 'y_prob.npy'):
+            print(out_dir + 'y_prob.npy exists. Skipping..')
+            continue
+
+        print("SVM:", out_dir)
+
         pos_class_dir = pre_d + str(lab) + "/"
-        neg_class_dirs = [pre_d + str(-lab) + "/", 
+        neg_class_dirs = [pre_d + str(-lab) + "/",
                           pre_d + str(BGR_LABEL) + "/",
                           pre_d + str(-BGR_LABEL) + "/",
                           pre_d + "None/"]
-            
-        pos_data, neg_data, orig_data = get_pos_neg_data(pos_class_dir, 
-                                                         neg_class_dirs)
 
-        pos_labels = np.ones(pos_data.shape[0], dtype=int)
-        neg_labels = pos_labels + 1
+        p_data, n_data, o_data, o_labels = get_pos_neg_data(pos_class_dir,
+                                                            neg_class_dirs)
 
-        data = np.concatenate((pos_data, neg_data))
-        labels = np.concatenate((pos_labels, neg_labels))
-            
+        data = np.concatenate((p_data, n_data))
+        p_labels = np.ones(p_data.shape[0], dtype=int)
+        n_labels = p_labels + 1
+        labels = np.concatenate((p_labels, n_labels))
+
         data, labels = shuffle_data_and_labels(data, labels)
 
-        # print("data and labels:", data.shape, labels.shape)
-        # print("orig_data:", orig_data.shape)
+        print("data and labels:", data.shape, labels.shape, data.dtype)
+        print("orig_data:", o_data.shape, o_labels.shape)
         # print("data and labels:", data.shape, labels.shape)
 
-        svm_clf = svm_with_cv(data, labels, sd)
-        pred = predict_features(data, orig_data, svm_clf, sd)
+        svm_clf, lr_clf = svm_with_cv(data, labels)
+        pred = predict_features(data, o_data, o_labels, (svm_clf, lr_clf))
 
         # print(orig_data.shape, pred.shape)
 
-        out_dir = SVM_MODEL_DIR + sd + "l_" + str(lab) + "/"
-        os.system("mkdir -p " + out_dir)
-            
         np.save(out_dir + "y_prob.npy", pred)
         pickle.dump(svm_clf, open(out_dir + 'svm_clf.pkl', 'wb'))
+        pickle.dump(lr_clf, open(out_dir + 'lr_clf.pkl', 'wb'))
+
+        # break
 
 
 def main():
     """ main method """
 
-    global cur_sd
-    n_jobs = 5
+    n_jobs = 7
     os.system("mkdir -p " + SVM_MODEL_DIR)
 
     scale_dirs = os.listdir(TRAIN_DIR)
     for sd in scale_dirs:
 
-        cur_sd = sd
         n_labels = list(np.arange(1, N_LABELS + 1, dtype=int))
+
         chunks = chunkify(n_labels, n_jobs)
         pool = Pool(n_jobs)
         pool.map(parallel_svm, chunks)
         pool.close()
         pool.join()
+
+        # parallel_svm(n_labels)
+        # break
 
 
 if __name__ == "__main__":
@@ -240,8 +270,8 @@ if __name__ == "__main__":
     TRAIN_DIR = FEAT_DIR + "train/"
     SVM_MODEL_DIR = FEAT_DIR + "svm_models/"
 
-    cur_sd = ''
+    PARSER = argparse.ArgumentParser(description=__doc__)
+    PARSER.add_argument("--verbose", "-v", action="store_true")
+    ARGS = PARSER.parse_args()
 
-    parser = argparse.ArgumentParser(description=__doc__)
-    args = parser.parse_args()
     main()
