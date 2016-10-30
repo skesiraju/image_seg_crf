@@ -6,21 +6,22 @@
 # Last modified : 22 Oct 2016
 
 """
+Construct tree, where root is the coarest patch and children are fine patches
 """
 
-import os 
-import sys 
-import argparse
+import os
+# import sys
+# import argparse
 import numpy as np
 from multiprocessing import Pool, cpu_count
-import pickle 
+# import pickle
 from crf_utils import ETC_D, SCALE_CONFIGS, PATCH_DIR, EXT, TREE_DIR
 from crf_utils import get_patch_info, get_RGB
 from misc.io import read_simple_flist, chunkify
 
 
 def find_overlap(p1, p2_info, s1_ifile, s2_ifile):
- 
+
     s1_img = get_RGB(s1_ifile)
     s2_img = get_RGB(s2_ifile)
     p1_pixels = np.where((s1_img == p1).all(axis=2))
@@ -36,29 +37,33 @@ def find_overlap(p1, p2_info, s1_ifile, s2_ifile):
         if cnt > max_cnt:
             max_overlap_patch = p2
             max_cnt = cnt
-            
+
     return max_cnt, max_overlap_patch
 
 
 def parallel_tree_construct(fids):
 
     for f_id in fids:
+        print(f_id)
         f_dict = {}
         for i in range(len(SCALE_CONFIGS)-1):
             s1, s2 = SCALE_CONFIGS[i: i+2]
+
+            # print(s1, s2)
             s1_ifile = PATCH_DIR + s1 + "/" + f_id + EXT
             s2_ifile = PATCH_DIR + s2 + "/" + f_id + EXT
             p1_info = get_patch_info(s1_ifile)
             p2_info = get_patch_info(s2_ifile)
+            # print(len(p1_info), len(p2_info))
             p_dict = {}
             for p1 in p1_info:
                 max_cnt, max_overlap_patch = find_overlap(p1, p2_info,
                                                           s1_ifile, s2_ifile)
                 p_dict[p1] = max_overlap_patch
             f_dict[str(i) + str(i+1)] = p_dict
-            
 
         pickle.dump(f_dict, open(TREE_DIR + f_id + ".pkl", "wb"))
+        # break
 
 
 def main():
@@ -67,7 +72,7 @@ def main():
     os.system("mkdir -p " + TREE_DIR)
 
     n_jobs = int(cpu_count() / 2)
-    
+
     flist = read_simple_flist(ETC_D + "all.flist")
 
     chunks = chunkify(flist, n_jobs)
@@ -77,8 +82,9 @@ def main():
     pool.close()
     pool.join()
 
+    # parallel_tree_construct(chunks[0])
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description=__doc__)
+    # args = parser.parse_args()
     main()

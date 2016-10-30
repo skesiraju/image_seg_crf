@@ -66,12 +66,12 @@ def get_njobs(flag=True):
 
 
 def load_training_data(input_fpaths):
-
+    """ Load data from files """
     return np.concatenate([np.load(f) for f in input_fpaths])
 
 
 def balance_data(data1, data2_size, fx):
-
+    """ Balance data by repeating them """
     if fx >= 2:
         data1 = np.repeat(data1, fx, axis=0)
 
@@ -85,6 +85,7 @@ def balance_data(data1, data2_size, fx):
 
 
 def get_pos_neg_data(pos_class_dir, neg_class_dirs):
+    """ Get data from positive and negative classes """
 
     orig_data = []
     orig_labels = []
@@ -157,7 +158,7 @@ def svm_with_cv(data, labels):
 
     # Train a logistic regression to convert the output of
     # SVM into probabilities
-    out = svm_clf.decision_function(K)
+    out = svm_clf.decision_function(gram_matrix)
     out = out.reshape(-1, 1)
 
     # print('out:', out.shape, 'labels:', labels.shape)
@@ -199,11 +200,11 @@ def parallel_svm(label_lst):
     """ Train SVMs parallely """
 
     # lab_dirs = os.listdir(TRAIN_DIR + sd)
-    pre_d = TRAIN_DIR + sd + "/l_"
+    pre_d = TRAIN_DIR + SCALE_DIR + "/l_"
 
     for lab in label_lst:
 
-        out_dir = SVM_MODEL_DIR + sd + "/l_" + str(lab) + "/"
+        out_dir = SVM_MODEL_DIR + SCALE_DIR + "/l_" + str(lab) + "/"
         os.system("mkdir -p " + out_dir)
 
         if os.path.exists(out_dir + 'y_prob.npy'):
@@ -247,26 +248,32 @@ def parallel_svm(label_lst):
 def main():
     """ main method """
 
+    global SCALE_DIR
+
     n_jobs = 7
     os.system("mkdir -p " + SVM_MODEL_DIR)
 
     scale_dirs = os.listdir(TRAIN_DIR)
-    for sd in scale_dirs:
+    for sdir in scale_dirs:
+
+        SCALE_DIR = sdir
 
         n_labels = list(np.arange(1, N_LABELS + 1, dtype=int))
 
+        """
         chunks = chunkify(n_labels, n_jobs)
         pool = Pool(n_jobs)
         pool.map(parallel_svm, chunks)
         pool.close()
         pool.join()
-
-        # parallel_svm(n_labels)
-        # break
+        """
+        parallel_svm(n_labels)
+        break
 
 
 if __name__ == "__main__":
 
+    SCALE_DIR = ''
     TRAIN_DIR = FEAT_DIR + "train/"
     SVM_MODEL_DIR = FEAT_DIR + "svm_models/"
 

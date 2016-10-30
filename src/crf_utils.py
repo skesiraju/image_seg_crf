@@ -6,10 +6,10 @@
 Commmon utilities
 """
 
+from collections import defaultdict
 import os
 import cv2
 from PIL import Image
-from collections import defaultdict
 import numpy as np
 
 DATA_PRE = os.environ['HOME'] + "/Downloads/VOCdevkit/VOC2008/"
@@ -21,6 +21,7 @@ LAB_DIR = DATA_PRE + "ImageSets/Main/"
 SEG_DIR = DATA_PRE + "SegmentationClass_PPM/"
 ETC_D = FEAT_DIR + "etc/"
 TREE_DIR = FEAT_DIR + "tree/"
+PATCH_LAB_DIR = FEAT_DIR + "patch_label_info/"
 
 EXT = ".ppm"
 
@@ -31,10 +32,11 @@ CREAM = (224, 224, 192)
 BGR = (0, 0, 0)
 IGN = [CREAM, BGR]
 
-SCALE_CONFIGS = ['s_0.5_k_500_m_50', 's_0.75_k_500_m_200', 's_1.25_k_700_m_1200']
+# less patches to more patches
+SCALE_CONFIGS = ['s_1.25_k_700_m_1200', 's_0.75_k_500_m_200', 's_0.5_k_500_m_50']
 
 # a_l, b_l slope and bias of logistic sigmoid at each scale level
-AB_LS = [(2., 0.), (1.5, 0.), (1.5, 0.)]
+# AB_LS = [(1.5, 0.), (1.5, 0.), (2, 0.)]
 
 # gamma_l param for patch similarity in the hierarchy
 GLS = [2, 1]
@@ -47,7 +49,7 @@ def save_fids(fids, fname):
 
 
 def get_RGB(fname):
-    
+
     img = cv2.imread(fname)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
