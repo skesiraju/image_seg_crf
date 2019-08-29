@@ -1,2 +1,3 @@
-# image_seg_crf
-Image segmentation using conditional random fields
+# Image segmentation using conditional random fields
+
+* Note: This repository is no longer maintained.
